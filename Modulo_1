@@ -1,0 +1,183 @@
+import { Injectable } from '@angular/core';
+import { isAndroid, isIOS } from '@nativescript/core';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class PlatformService {
+  getPlatform(): string {
+    return isAndroid ? 'Android' : isIOS ? 'iOS' : 'Unknown';
+  }
+
+  isRunningOnAndroid(): boolean {
+    return isAndroid;
+  }
+}
+import { Component, OnInit } from '@angular/core';
+import { PlatformService } from '../../core/platform.service';
+
+@Component({
+  selector: 'ns-items',
+  templateUrl: './items.component.html',
+  styleUrls: ['./items.component.css']
+})
+export class ItemsComponent implements OnInit {
+  public items: string[] = [];
+  public platformMessage: string = '';
+
+  constructor(private platformService: PlatformService) {}
+
+  ngOnInit(): void {
+    this.items = ['Elemento 1', 'Elemento 2', 'Elemento 3', 'Elemento 4'];
+
+    // Asigna un valor solo en Android (requisito 10)
+    if (this.platformService.isRunningOnAndroid()) {
+      this.platformMessage = 'Este dispositivo es Android';
+    } else {
+      this.platformMessage = 'Este dispositivo NO es Android';
+    }
+  }
+}
+<ActionBar title="Mis Elementos" class="action-bar"></ActionBar>
+
+<StackLayout class="page">
+  <Label [text]="platformMessage" class="platform-label"></Label>
+
+  <ListView [items]="items" class="list-group">
+    <ng-template let-item="item">
+      <Label [text]="item" class="list-group-item"></Label>
+    </ng-template>
+  </ListView>
+</StackLayout>
+/* Estilos comunes */
+.platform-label {
+  font-size: 18;
+  text-align: center;
+  margin: 10;
+  padding: 10;
+  background-color: #e0e0e0;
+  border-radius: 5;
+}
+
+.list-group {
+  margin: 0;
+  width: 100%;
+}
+
+.list-group-item {
+  padding: 15;
+  font-size: 16;
+}
+
+/* Sobrecarga para Android */
+.platform-label.android {
+  color: #3367d6;
+  background-color: #e8eaf6;
+}
+
+.list-group-item.android {
+  background-color: #f5f5f5;
+  color: #212121;
+}
+
+/* Sobrecarga para iOS */
+.platform-label.ios {
+  color: #007aff;
+  background-color: #f0f7ff;
+  border-color: #007aff;
+  border-width: 1;
+  border-style: solid;
+}
+
+.list-group-item.ios {
+  background-color: #ffffff;
+  color: #000000;
+}
+import { NgModule } from '@angular/core';
+import { Routes } from '@angular/router';
+import { NativeScriptRouterModule } from '@nativescript/angular';
+import { ItemsComponent } from './items.component';
+
+const routes: Routes = [
+  { path: '', component: ItemsComponent }
+];
+
+@NgModule({
+  imports: [NativeScriptRouterModule.forChild(routes)],
+  exports: [NativeScriptRouterModule]
+})
+export class ItemsRoutingModule {}
+import { NgModule, NO_ERRORS_SCHEMA } from '@angular/core';
+import { NativeScriptCommonModule } from '@nativescript/angular';
+import { ItemsComponent } from './items.component';
+import { ItemsRoutingModule } from './items-routing.module';
+
+@NgModule({
+  imports: [
+    NativeScriptCommonMODULE,
+    ItemsRoutingModule
+  ],
+  declarations: [ItemsComponent],
+  schemas: [NO_ERRORS_SCHEMA]
+})
+export class ItemsModule {}
+import { NgModule } from '@angular/core';
+import { Routes } from '@angular/router';
+import { NativeScriptRouterModule } from '@nativescript/angular';
+
+const routes: Routes = [
+  { path: '', redirectTo: '/home', pathMatch: 'full' },
+  { path: 'home', loadChildren: () => import('./home/home.module').then(m => m.HomeModule) },
+  { path: 'browse', loadChildren: () => import('./browse/browse.module').then(m => m.BrowseModule) },
+  { path: 'search', loadChildren: () => import('./search/search.module').then(m => m.SearchModule) },
+  { path: 'featured', loadChildren: () => import('./featured/featured.module').then(m => m.FeaturedModule) },
+  // Nueva ruta para el módulo personalizado
+  { path: 'items', loadChildren: () => import('./features/items/items.module').then(m => m.ItemsModule) }
+];
+
+@NgModule({
+  imports: [NativeScriptRouterModule.forRoot(routes)],
+  exports: [NativeScriptRouterModule]
+})
+export class AppRoutingModule {}
+<GridLayout class="page">
+  <RadSideDrawer #drawer>
+    <ng-template drawer>
+      <StackLayout class="drawer-content">
+        <StackLayout class="header-content">
+          <Label text="Mi App" class="drawer-header"></Label>
+        </StackLayout>
+
+        <StackLayout class="drawer-menu">
+          <Label text="Home" [nsRouterLink]="['/home']" class="drawer-item"></Label>
+          <Label text="Browse" [nsRouterLink]="['/browse']" class="drawer-item"></Label>
+          <Label text="Search" [nsRouterLink]="['/search']" class="drawer-item"></Label>
+          <Label text="Featured" [nsRouterLink]="['/featured']" class="drawer-item"></Label>
+          <!-- Nueva entrada en el drawer -->
+          <Label text="Mis Elementos" [nsRouterLink]="['/items']" class="drawer-item"></Label>
+        </StackLayout>
+      </StackLayout>
+    </ng-template>
+
+    <ng-template drawerContent>
+      <page-router-outlet></page-router-outlet>
+    </ng-template>
+  </RadSideDrawer>
+</GridLayout>
+import { Component, OnInit } from '@angular/core';
+import { PlatformService } from '../core/platform.service';
+
+@Component({
+  selector: 'ns-home',
+  templateUrl: './home.component.html',
+  styleUrls: ['./home.component.css']
+})
+export class HomeComponent implements OnInit {
+  public welcomeMessage: string = '';
+
+  constructor(private platformService: PlatformService) {}
+
+  ngOnInit(): void {
+    this.welcomeMessage = `Bienvenido desde ${this.platformService.getPlatform()}!`;
+  }
+}
