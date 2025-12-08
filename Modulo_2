@@ -1,0 +1,272 @@
+// app.module.ts
+import { NgModule, NO_ERRORS_SCHEMA } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { NativeScriptModule, NativeScriptFormsModule, NativeScriptRouterModule } from '@nativescript/angular';
+import { ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
+import { RouterModule, Routes } from '@angular/router';
+import { registerElement } from '@nativescript/angular';
+import * as application from '@nativescript/core/application';
+
+// Registrar plugin PullToRefresh
+registerElement('PullToRefresh', () => require('@nativescript-community/ui-pulltorefresh').PullToRefresh);
+
+const routes: Routes = [
+  { path: '', redirectTo: '/search', pathMatch: 'full' },
+  { path: 'search', component: SearchComponent },
+  { path: 'detail/:id', component: DetailComponent }
+];
+
+// Directiva validadora personalizada
+@Directive({
+  selector: '[minLengthValidator]',
+  providers: [{ provide: NG_VALIDATORS, useExisting: MinLengthValidatorDirective, multi: true }]
+})
+export class MinLengthValidatorDirective implements Validator {
+  @Input('minLengthValidator') minLength: number;
+  
+  validate(control: FormControl) {
+    return control.value && control.value.length >= this.minLength 
+      ? null 
+      : { minLength: { requiredLength: this.minLength } };
+  }
+}
+
+// Servicio de datos
+@Injectable({ providedIn: 'root' })
+export class DataService {
+  private items = Array.from({ length: 10 }, (_, i) => ({ 
+    id: i + 1, 
+    name: `Item ${i + 1}`, 
+    category: 'General',
+    description: `Descripción del item ${i + 1}` 
+  }));
+  
+  getItems() {
+    return [...this.items];
+  }
+  
+  addRandomItem() {
+    const newId = this.items.length + 1;
+    this.items.push({ 
+      id: newId, 
+      name: `Item aleatorio ${newId}`, 
+      category: 'Nuevo',
+      description: `Nuevo item agregado` 
+    });
+    return this.items;
+  }
+  
+  updateItemCategory(id: number, category: string) {
+    const item = this.items.find(i => i.id === id);
+    if (item) item.category = category;
+    return item;
+  }
+  
+  getItem(id: number) {
+    return this.items.find(item => item.id === id);
+  }
+}
+
+// Search Component
+@Component({
+  selector: 'ns-search',
+  template: `
+    <ActionBar title="Búsqueda" class="action-bar">
+      <ActionItem (tap)="showToast()" ios.position="right">
+        <Button text="🔔" class="notification-icon" (loaded)="onIconLoaded($event)"></Button>
+      </ActionItem>
+    </ActionBar>
+    
+    <GridLayout rows="auto, *">
+      <StackLayout row="0" class="search-bar">
+        <TextField [(ngModel)]="searchText" hint="Buscar..." 
+                   class="input" [minLengthValidator]="3" #searchControl="ngModel"></TextField>
+        <Label *ngIf="searchControl.errors?.minLength" text="Mínimo 3 caracteres" class="error-text"></Label>
+      </StackLayout>
+      
+      <PullToRefresh row="1" (refresh)="onPullToRefreshInitiated($event)">
+        <ListView [items]="filteredItems" class="list-group" (itemTap)="onItemTap($event)">
+          <ng-template let-item="item">
+            <FlexboxLayout class="list-item" flexDirection="row" alignItems="center" 
+                         (doubleTap)="onDoubleTap(item)" (longPress)="onLongPress(item)">
+              <Label [text]="item.name" class="h3" flexGrow="1"></Label>
+              <Button [text]="item.category" (tap)="showCategoryDialog(item)" 
+                      class="category-btn"></Button>
+              <Label text="→" class="arrow"></Label>
+            </FlexboxLayout>
+          </ng-template>
+        </ListView>
+      </PullToRefresh>
+    </GridLayout>
+  `,
+  styles: [`
+    .list-item { padding: 15; border-bottom-width: 1; border-bottom-color: #eee; }
+    .h3 { font-size: 18; margin: 0 10; }
+    .category-btn { background-color: #2196F3; color: white; padding: 5 10; border-radius: 15; }
+    .arrow { font-size: 20; color: #666; margin-left: 10; }
+    .search-bar { padding: 10; background-color: #f5f5f5; }
+    .input { padding: 10; border-width: 1; border-color: #ddd; border-radius: 5; }
+    .error-text { color: red; font-size: 12; margin-top: 5; }
+    .notification-icon { animation-name: rotate; animation-duration: 1s; animation-fill-mode: forwards; }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  `]
+})
+export class SearchComponent implements OnInit {
+  searchText = '';
+  items: any[] = [];
+  filteredItems: any[] = [];
+  
+  constructor(
+    private dataService: DataService,
+    private routerExtensions: RouterExtensions,
+    private dialogs: Dialogs
+  ) {}
+  
+  ngOnInit() {
+    this.loadItems();
+  }
+  
+  loadItems() {
+    this.items = this.dataService.getItems();
+    this.filteredItems = [...this.items];
+  }
+  
+  onItemTap(args: any) {
+    const item = this.filteredItems[args.index];
+    this.routerExtensions.navigate(['/detail', item.id]);
+  }
+  
+  onPullToRefreshInitiated(args: any) {
+    setTimeout(() => {
+      this.dataService.addRandomItem();
+      this.loadItems();
+      args.object.refreshing = false;
+    }, 1000);
+  }
+  
+  showCategoryDialog(item: any) {
+    this.dialogs.action({
+      message: "Seleccionar categoría",
+      cancelButtonText: "Cancelar",
+      actions: ["General", "Urgente", "Personal", "Trabajo"]
+    }).then(result => {
+      if (result !== 'Cancelar') {
+        this.dataService.updateItemCategory(item.id, result);
+        this.loadItems();
+      }
+    });
+  }
+  
+  showToast() {
+    alert({ 
+      title: "Notificación",
+      message: "Lista actualizada correctamente",
+      okButtonText: "OK" 
+    });
+  }
+  
+  onDoubleTap(item: any) {
+    alert(`Double tap en: ${item.name}`);
+  }
+  
+  onLongPress(item: any) {
+    alert(`Long press en: ${item.name}`);
+  }
+  
+  onIconLoaded(args: any) {
+    const btn = args.object;
+    btn.animate({ rotate: 360, duration: 1000 });
+  }
+}
+
+// Detail Component
+@Component({
+  selector: 'ns-detail',
+  template: `
+    <ActionBar [title]="item?.name" class="action-bar">
+      <NavigationButton text="Volver" android.systemIcon="ic_menu_back"></NavigationButton>
+    </ActionBar>
+    
+    <ScrollView>
+      <StackLayout class="detail-container">
+        <Label [text]="item?.description" class="description" textWrap="true"></Label>
+        <Label [text]="'Categoría: ' + item?.category" class="category"></Label>
+        <Button text="Mostrar Toast" (tap)="showDetailToast()" class="btn btn-primary"></Button>
+      </StackLayout>
+    </ScrollView>
+  `,
+  styles: [`
+    .detail-container { padding: 20; }
+    .description { font-size: 16; margin-bottom: 20; }
+    .category { font-size: 14; color: #666; margin-bottom: 20; }
+    .btn { padding: 15; margin: 10; border-radius: 5; }
+    .btn-primary { background-color: #4CAF50; color: white; }
+  `]
+})
+export class DetailComponent implements OnInit {
+  item: any;
+  
+  constructor(
+    private route: ActivatedRoute,
+    private dataService: DataService
+  ) {}
+  
+  ngOnInit() {
+    const id = +this.route.snapshot.params.id;
+    this.item = this.dataService.getItem(id);
+  }
+  
+  showDetailToast() {
+    alert({ 
+      title: "Detalle",
+      message: `Viendo: ${this.item.name}`,
+      okButtonText: "OK" 
+    });
+  }
+}
+
+// App Component
+@Component({
+  selector: 'ns-app',
+  template: `<page-router-outlet></page-router-outlet>`
+})
+export class AppComponent {}
+
+// App Module
+@NgModule({
+  bootstrap: [AppComponent],
+  imports: [
+    BrowserModule,
+    NativeScriptModule,
+    NativeScriptFormsModule,
+    ReactiveFormsModule,
+    NativeScriptRouterModule.forRoot(routes)
+  ],
+  declarations: [
+    AppComponent,
+    SearchComponent,
+    DetailComponent,
+    MinLengthValidatorDirective
+  ],
+  providers: [],
+  schemas: [NO_ERRORS_SCHEMA]
+})
+export class AppModule {}
+
+// splashscreen.xml (ubicar en App_Resources/Android)
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ns_primary" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/logo" />
+    </item>
+</layer-list>
+
+// colors.xml (ubicar en App_Resources/Android/values)
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ns_primary">#2196F3</color>
+    <color name="ns_primaryDark">#1976D2</color>
+</resources>
