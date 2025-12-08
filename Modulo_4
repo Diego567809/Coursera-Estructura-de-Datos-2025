@@ -1,0 +1,338 @@
+// firebase.nativescript.json
+{
+  "external_push_client_only": false,
+  "using_ios": false,
+  "using_android": true,
+  "firebase": {
+    "apiKey": "TU_API_KEY_AQUI",
+    "authDomain": "tu-app.firebaseapp.com",
+    "databaseURL": "https://tu-app.firebaseio.com",
+    "projectId": "tu-app",
+    "storageBucket": "tu-app.appspot.com",
+    "messagingSenderId": "1234567890",
+    "appId": "1:1234567890:android:abcdef123456",
+    "googleCloudMessagingSenderId": "1234567890",
+    "googleCloudMessagingApiKey": "TU_GCM_API_KEY_AQUI"
+  }
+}
+
+// app.module.ts
+import { NgModule, NO_ERRORS_SCHEMA } from '@angular/core';
+import { NativeScriptModule } from '@nativescript/angular';
+import { AppComponent } from './app.component';
+
+// Firebase
+import * as firebase from '@nativescript/firebase';
+firebase.init({
+  showNotifications: true,
+  showNotificationsWhenInForeground: true
+}).then(() => {
+  firebase.addOnMessageReceivedCallback(async (message) => {
+    alert({
+      title: "Nueva notificación",
+      message: message.body,
+      okButtonText: "OK"
+    });
+  });
+});
+
+// Redux reducer test
+export function counterReducer(state = 0, action: any) {
+  switch (action.type) {
+    case 'INCREMENT': return state + 1;
+    case 'DECREMENT': return state - 1;
+    case 'RESET': return 0;
+    default: return state;
+  }
+}
+
+// Services
+@Injectable({ providedIn: 'root' })
+export class CameraService {
+  takePicture(): Promise<any> {
+    const camera = require('@nativescript/camera').Camera;
+    const imageSource = require('@nativescript/core/image-source').ImageSource;
+    
+    return camera.requestPermissions().then(() => 
+      camera.takePicture({ saveToGallery: true })
+    );
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class ShareService {
+  shareText(text: string) {
+    const socialShare = require('@nativescript/social-share');
+    return socialShare.shareText(text);
+  }
+  
+  shareImage(imagePath: string) {
+    const socialShare = require('@nativescript/social-share');
+    return socialShare.shareImage(imagePath);
+  }
+}
+
+// Components
+@Component({
+  selector: 'ns-home',
+  template: `
+    <ScrollView>
+      <StackLayout class="container">
+        
+        <!-- Notifications -->
+        <StackLayout class="card">
+          <Label text="Notificaciones Firebase" class="title"></Label>
+          <Button text="Simular Notificación" (tap)="showNotification()" class="btn"></Button>
+        </StackLayout>
+        
+        <!-- Camera -->
+        <StackLayout class="card">
+          <Label text="Cámara" class="title"></Label>
+          <Button text="Tomar Foto" (tap)="takePhoto()" class="btn"></Button>
+          <Image *ngIf="photoPath" [src]="photoPath" stretch="aspectFit" height="200"></Image>
+          <Button *ngIf="photoPath" text="Compartir Foto" (tap)="sharePhoto()" class="btn"></Button>
+        </StackLayout>
+        
+        <!-- Sharing -->
+        <StackLayout class="card">
+          <Label text="Compartir" class="title"></Label>
+          <TextField [(ngModel)]="shareText" hint="Texto para compartir" class="input"></TextField>
+          <Button text="Compartir Texto" (tap)="shareTextContent()" class="btn"></Button>
+          <Button text="Compartir Imagen Demo" (tap)="shareDemoImage()" class="btn"></Button>
+        </StackLayout>
+        
+        <!-- Maps -->
+        <StackLayout class="card" height="300">
+          <Label text="Mapa Google" class="title"></Label>
+          <GridLayout>
+            <MapView 
+              latitude="-33.4489" 
+              longitude="-70.6693" 
+              zoom="15" 
+              bearing="0" 
+              tilt="0" 
+              padding="40"
+              mapReady="onMapReady($event)">
+            </MapView>
+          </GridLayout>
+        </StackLayout>
+        
+        <!-- Redux Counter -->
+        <StackLayout class="card">
+          <Label text="Redux Counter" class="title"></Label>
+          <Label [text]="'Contador: ' + (counter$ | async)" class="counter"></Label>
+          <Button text="Incrementar" (tap)="increment()" class="btn"></Button>
+          <Button text="Decrementar" (tap)="decrement()" class="btn"></Button>
+        </StackLayout>
+        
+      </StackLayout>
+    </ScrollView>
+  `,
+  styles: [`
+    .container { padding: 20; }
+    .card { padding: 15; margin-bottom: 20; background: white; border-radius: 10; }
+    .title { font-size: 18; font-weight: bold; margin-bottom: 10; color: #2196F3; }
+    .btn { background: #4CAF50; color: white; padding: 10; margin: 5 0; border-radius: 5; }
+    .input { padding: 10; border-width: 1; border-color: #ddd; margin-bottom: 10; }
+    .counter { font-size: 24; text-align: center; margin: 10; }
+  `]
+})
+export class HomeComponent implements OnInit {
+  shareText = '';
+  photoPath = '';
+  counter$ = this.store.select(state => state.counter);
+  
+  constructor(
+    private cameraService: CameraService,
+    private shareService: ShareService,
+    private store: Store<{ counter: number }>
+  ) {}
+  
+  ngOnInit() {
+    this.initializeMap();
+  }
+  
+  showNotification() {
+    alert({
+      title: "Notificación de prueba",
+      message: "Esta es una notificación simulada de Firebase",
+      okButtonText: "OK"
+    });
+  }
+  
+  takePhoto() {
+    this.cameraService.takePicture().then(imageAsset => {
+      const imageSource = require('@nativescript/core/image-source').ImageSource;
+      imageSource.fromAsset(imageAsset).then(source => {
+        const folder = require('@nativescript/core/file-system').knownFolders.documents();
+        const path = require('@nativescript/core/file-system').path;
+        const fileName = `photo_${Date.now()}.jpg`;
+        const filePath = path.join(folder.path, fileName);
+        source.saveToFile(filePath, 'jpg');
+        this.photoPath = filePath;
+      });
+    });
+  }
+  
+  sharePhoto() {
+    if (this.photoPath) {
+      this.shareService.shareImage(this.photoPath);
+    }
+  }
+  
+  shareTextContent() {
+    if (this.shareText) {
+      this.shareService.shareText(this.shareText);
+    }
+  }
+  
+  shareDemoImage() {
+    // Compartir imagen de ejemplo
+    const demoImage = '~/assets/demo.jpg';
+    this.shareService.shareImage(demoImage);
+  }
+  
+  onMapReady(args) {
+    const mapView = args.object;
+    const marker = new require('@nativescript/google-maps').Marker();
+    marker.position = require('@nativescript/google-maps').Position.positionFromLatLng(-33.4489, -70.6693);
+    marker.title = "Santiago";
+    marker.snippet = "Chile";
+    marker.color = "#FF0000";
+    mapView.addMarker(marker);
+  }
+  
+  initializeMap() {
+    require('@nativescript/google-maps').GMSServices.provideAPIKey("TU_API_KEY_GOOGLE_MAPS_AQUI");
+  }
+  
+  increment() {
+    this.store.dispatch({ type: 'INCREMENT' });
+  }
+  
+  decrement() {
+    this.store.dispatch({ type: 'DECREMENT' });
+  }
+}
+
+// Test Suite - counter.spec.ts
+describe('Counter Reducer', () => {
+  it('should return initial state', () => {
+    expect(counterReducer(undefined, {})).toBe(0);
+  });
+  
+  it('should handle INCREMENT', () => {
+    expect(counterReducer(0, { type: 'INCREMENT' })).toBe(1);
+    expect(counterReducer(5, { type: 'INCREMENT' })).toBe(6);
+  });
+  
+  it('should handle DECREMENT', () => {
+    expect(counterReducer(5, { type: 'DECREMENT' })).toBe(4);
+    expect(counterReducer(0, { type: 'DECREMENT' })).toBe(-1);
+  });
+  
+  it('should handle RESET', () => {
+    expect(counterReducer(10, { type: 'RESET' })).toBe(0);
+    expect(counterReducer(-5, { type: 'RESET' })).toBe(0);
+  });
+  
+  it('should return current state for unknown action', () => {
+    expect(counterReducer(5, { type: 'UNKNOWN' })).toBe(5);
+  });
+});
+
+// karma.conf.js
+module.exports = function(config) {
+  config.set({
+    frameworks: ['jasmine'],
+    plugins: [
+      require('karma-jasmine'),
+      require('karma-chrome-launcher'),
+      require('karma-junit-reporter')
+    ],
+    reporters: ['progress', 'junit'],
+    junitReporter: {
+      outputDir: 'test-results',
+      outputFile: 'test-results.xml',
+      useBrowserName: false
+    },
+    browsers: ['Chrome'],
+    singleRun: true
+  });
+};
+
+// package.json scripts
+{
+  "scripts": {
+    "test": "karma start karma.conf.js",
+    "android": "ns run android",
+    "build": "ns build android"
+  },
+  "dependencies": {
+    "@angular/core": "~11.0.0",
+    "@nativescript/angular": "~11.0.0",
+    "@nativescript/core": "~8.0.0",
+    "@nativescript/firebase": "^11.1.3",
+    "@nativescript/camera": "^5.0.9",
+    "@nativescript/social-share": "^2.0.1",
+    "@nativescript/google-maps": "^1.0.0",
+    "@ngrx/store": "^12.0.0"
+  },
+  "devDependencies": {
+    "@nativescript/types": "~8.0.0",
+    "@nativescript/webpack": "~5.0.0",
+    "jasmine-core": "^3.8.0",
+    "karma": "^6.3.4",
+    "karma-jasmine": "^4.0.1",
+    "karma-chrome-launcher": "^3.1.0",
+    "karma-junit-reporter": "^2.0.1",
+    "typescript": "~4.0.0"
+  }
+}
+
+// app.ts
+import { platformNativeScriptDynamic } from '@nativescript/angular';
+import { AppModule } from './app.module';
+import { StoreModule } from '@ngrx/store';
+import { counterReducer } from './app.module';
+
+AppModule['decorators'][0].args[0].imports.push(
+  StoreModule.forRoot({ counter: counterReducer })
+);
+
+platformNativeScriptDynamic().bootstrapModule(AppModule);
+
+// App_Resources/Android/google-services.json
+{
+  "project_info": {
+    "project_number": "1234567890",
+    "project_id": "tu-app",
+    "storage_bucket": "tu-app.appspot.com"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "1:1234567890:android:abcdef123456",
+      "android_client_info": {
+        "package_name": "org.nativescript.yourapp"
+      }
+    },
+    "oauth_client": [],
+    "api_key": [{
+      "current_key": "TU_API_KEY_AQUI"
+    }],
+    "services": {
+      "appinvite_service": {
+        "other_platform_oauth_client": []
+      }
+    }
+  }],
+  "configuration_version": "1"
+}
+
+// Instructions:
+// 1. Reemplazar todas las claves (TU_API_KEY_AQUI) con tus propias claves
+// 2. Para Firebase: crear proyecto en console.firebase.google.com
+// 3. Para Google Maps: habilitar API en Google Cloud Console
+// 4. Ejecutar tests: npm test (generará test-results.xml)
+// 5. Agregar imágenes en assets/demo.jpg para compartir
+// 6. Configurar permisos en AndroidManifest.xml para cámara y almacenamiento
