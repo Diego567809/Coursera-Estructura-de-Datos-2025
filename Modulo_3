@@ -1,0 +1,354 @@
+// server.js - API Express
+const express = require('express');
+const cors = require('cors');
+const app = express();
+app.use(cors());
+
+const items = [
+  { id: 1, title: 'Artículo 1', category: 'tech', favorite: false },
+  { id: 2, title: 'Artículo 2', category: 'news', favorite: false },
+  { id: 3, title: 'Artículo 3', category: 'tech', favorite: true },
+  { id: 4, title: 'Artículo 4', category: 'sports', favorite: false },
+  { id: 5, title: 'Artículo 5', category: 'news', favorite: true }
+];
+
+app.get('/api/items', (req, res) => {
+  let results = [...items];
+  if (req.query.search) {
+    const search = req.query.search.toLowerCase();
+    results = results.filter(item => 
+      item.title.toLowerCase().includes(search) || 
+      item.category.toLowerCase().includes(search)
+    );
+  }
+  if (req.query.category) {
+    results = results.filter(item => item.category === req.query.category);
+  }
+  res.json(results);
+});
+
+app.get('/api/items/:id', (req, res) => {
+  const item = items.find(i => i.id == req.params.id);
+  res.json(item || {});
+});
+
+const PORT = 3000;
+app.listen(PORT, () => console.log(`API en http://localhost:${PORT}`));
+
+// app.module.ts
+import { NgModule, NO_ERRORS_SCHEMA } from '@angular/core';
+import { NativeScriptModule } from '@nativescript/angular';
+import { HttpClientModule } from '@angular/common/http';
+import { ReactiveFormsModule } from '@angular/forms';
+import { StoreModule } from '@ngrx/store';
+
+// Redux
+const readActions: any[] = [];
+export function readReducer(state = readActions, action: any) {
+  if (action.type === 'ADD_READ') {
+    return [...state, action.payload];
+  }
+  return state;
+}
+
+// Storage Service
+@Injectable({ providedIn: 'root' })
+export class StorageService {
+  private storage = require('@nativescript/core/application-settings');
+  private ngrokUrl = 'http://localhost:3000';
+  
+  setNgrokUrl(url: string) { this.storage.setString('ngrok_url', url); }
+  getNgrokUrl(): string { return this.storage.getString('ngrok_url') || this.ngrokUrl; }
+  setUserName(name: string) { this.storage.setString('user_name', name); }
+  getUserName(): string { return this.storage.getString('user_name') || 'Usuario'; }
+  getFavorites(): any[] { 
+    const favs = this.storage.getString('favorites');
+    return favs ? JSON.parse(favs) : [];
+  }
+  toggleFavorite(item: any) {
+    let favs = this.getFavorites();
+    const index = favs.findIndex(f => f.id === item.id);
+    if (index >= 0) {
+      favs.splice(index, 1);
+    } else {
+      favs.push({...item, favorite: true});
+    }
+    this.storage.setString('favorites', JSON.stringify(favs));
+    return favs;
+  }
+}
+
+// API Service
+@Injectable({ providedIn: 'root' })
+export class ApiService {
+  constructor(private http: HttpClient, private storage: StorageService) {}
+  
+  getItems(search?: string) {
+    let url = `${this.storage.getNgrokUrl()}/api/items`;
+    if (search) url += `?search=${encodeURIComponent(search)}`;
+    return this.http.get<any[]>(url);
+  }
+}
+
+// Main Component
+@Component({
+  selector: 'ns-main',
+  template: `
+    <GridLayout rows="auto, auto, *">
+      <StackLayout row="0" class="header">
+        <Label [text]="'Hola ' + userName" class="user-name"></Label>
+        <Button text="⚙️" (tap)="goToSettings()" class="settings-btn"></Button>
+      </StackLayout>
+      
+      <StackLayout row="1" class="search-box">
+        <TextField [(ngModel)]="searchText" hint="Buscar artículos..." class="input"></TextField>
+        <Button text="Buscar" (tap)="search()" class="btn"></Button>
+        <Button text="Favoritos" (tap)="goToFavorites()" class="btn"></Button>
+      </StackLayout>
+      
+      <ListView row="2" [items]="items" class="list">
+        <ng-template let-item="item">
+          <StackLayout class="item">
+            <Label [text]="item.title" class="title"></Label>
+            <Label [text]="item.category" class="category"></Label>
+            <Button [text]="item.favorite ? '★' : '☆'" (tap)="toggleFavorite(item)" class="fav-btn"></Button>
+            <Button text="Leer" (tap)="markAsRead(item)" class="read-btn"></Button>
+          </StackLayout>
+        </ng-template>
+      </ListView>
+    </GridLayout>
+  `,
+  styles: [`
+    .header { padding: 10; background: #2196F3; flex-direction: row; justify-content: space-between; }
+    .user-name { color: white; font-size: 18; }
+    .settings-btn { color: white; font-size: 24; }
+    .search-box { padding: 10; background: #f5f5f5; }
+    .input { padding: 10; border-width: 1; border-color: #ddd; margin-bottom: 10; }
+    .btn { background: #4CAF50; color: white; padding: 10; margin: 5; }
+    .list { padding: 10; }
+    .item { padding: 15; border-bottom-width: 1; border-bottom-color: #eee; }
+    .title { font-size: 16; font-weight: bold; }
+    .category { color: #666; font-size: 14; }
+    .fav-btn { color: gold; font-size: 20; }
+    .read-btn { background: #FF9800; color: white; padding: 5 10; margin-top: 5; }
+  `]
+})
+export class MainComponent implements OnInit {
+  searchText = '';
+  items: any[] = [];
+  userName = '';
+  
+  constructor(
+    private api: ApiService,
+    private router: RouterExtensions,
+    private storage: StorageService,
+    private store: Store<{ read: any[] }>
+  ) {}
+  
+  ngOnInit() {
+    this.userName = this.storage.getUserName();
+    this.loadItems();
+  }
+  
+  loadItems() {
+    this.api.getItems().subscribe(data => this.items = data);
+  }
+  
+  search() {
+    this.api.getItems(this.searchText).subscribe(data => this.items = data);
+  }
+  
+  toggleFavorite(item: any) {
+    this.storage.toggleFavorite(item);
+    item.favorite = !item.favorite;
+  }
+  
+  markAsRead(item: any) {
+    this.store.dispatch({ type: 'ADD_READ', payload: item });
+  }
+  
+  goToSettings() {
+    this.router.navigate(['/settings']);
+  }
+  
+  goToFavorites() {
+    this.router.navigate(['/favorites']);
+  }
+}
+
+// Settings Component
+@Component({
+  selector: 'ns-settings',
+  template: `
+    <StackLayout class="settings">
+      <Label text="Configuración" class="title"></Label>
+      
+      <StackLayout class="form-group">
+        <Label text="Nombre de usuario"></Label>
+        <TextField [(ngModel)]="userName" hint="Tu nombre" class="input"></TextField>
+        <Button text="Guardar" (tap)="saveUserName()" class="btn"></Button>
+      </StackLayout>
+      
+      <StackLayout class="form-group">
+        <Label text="URL de Ngrok"></Label>
+        <TextField [(ngModel)]="ngrokUrl" hint="https://xxxx.ngrok.io" class="input"></TextField>
+        <Button text="Guardar URL" (tap)="saveNgrokUrl()" class="btn"></Button>
+      </StackLayout>
+      
+      <Button text="Volver" (tap)="goBack()" class="btn-back"></Button>
+    </StackLayout>
+  `,
+  styles: [`
+    .settings { padding: 20; }
+    .title { font-size: 24; font-weight: bold; margin-bottom: 20; }
+    .form-group { margin-bottom: 20; }
+    .input { padding: 10; border-width: 1; border-color: #ddd; margin: 5 0; }
+    .btn { background: #2196F3; color: white; padding: 10; margin: 10 0; }
+    .btn-back { background: #666; color: white; padding: 10; }
+  `]
+})
+export class SettingsComponent {
+  userName = '';
+  ngrokUrl = '';
+  
+  constructor(
+    private storage: StorageService,
+    private router: RouterExtensions
+  ) {
+    this.userName = this.storage.getUserName();
+    this.ngrokUrl = this.storage.getNgrokUrl();
+  }
+  
+  saveUserName() {
+    this.storage.setUserName(this.userName);
+    alert('Nombre guardado');
+  }
+  
+  saveNgrokUrl() {
+    this.storage.setNgrokUrl(this.ngrokUrl);
+    alert('URL guardada');
+  }
+  
+  goBack() {
+    this.router.back();
+  }
+}
+
+// Favorites Component
+@Component({
+  selector: 'ns-favorites',
+  template: `
+    <StackLayout class="favorites">
+      <Label text="Favoritos" class="title"></Label>
+      
+      <ListView [items]="favorites" class="list">
+        <ng-template let-item="item">
+          <StackLayout class="fav-item">
+            <Label [text]="item.title" class="fav-title"></Label>
+            <Button text="Leer ahora" (tap)="readNow(item)" class="read-now-btn"></Button>
+            <Button text="Quitar" (tap)="removeFavorite(item)" class="remove-btn"></Button>
+          </StackLayout>
+        </ng-template>
+      </ListView>
+      
+      <Button text="Volver" (tap)="goBack()" class="btn"></Button>
+    </StackLayout>
+  `,
+  styles: [`
+    .favorites { padding: 20; }
+    .title { font-size: 24; font-weight: bold; margin-bottom: 20; }
+    .list { margin-bottom: 20; }
+    .fav-item { padding: 15; border-bottom-width: 1; border-color: #eee; }
+    .fav-title { font-size: 16; font-weight: bold; }
+    .read-now-btn { background: #4CAF50; color: white; padding: 10; margin: 5 0; }
+    .remove-btn { background: #f44336; color: white; padding: 10; margin: 5 0; }
+    .btn { background: #666; color: white; padding: 10; }
+  `]
+})
+export class FavoritesComponent implements OnInit {
+  favorites: any[] = [];
+  readItems$ = this.store.select(state => state.read);
+  
+  constructor(
+    private storage: StorageService,
+    private store: Store<{ read: any[] }>,
+    private router: RouterExtensions
+  ) {}
+  
+  ngOnInit() {
+    this.favorites = this.storage.getFavorites();
+  }
+  
+  readNow(item: any) {
+    this.store.dispatch({ type: 'ADD_READ', payload: item });
+    alert(`Leyendo: ${item.title}`);
+  }
+  
+  removeFavorite(item: any) {
+    this.storage.toggleFavorite(item);
+    this.favorites = this.storage.getFavorites();
+  }
+  
+  goBack() {
+    this.router.back();
+  }
+}
+
+// Read List Component
+@Component({
+  selector: 'ns-read-list',
+  template: `
+    <StackLayout>
+      <Label text="Artículos leídos" class="title"></Label>
+      <ListView [items]="readItems$ | async" class="list">
+        <ng-template let-item="item">
+          <Label [text]="item.title" class="read-item"></Label>
+        </ng-template>
+      </ListView>
+    </StackLayout>
+  `,
+  styles: [`
+    .title { font-size: 20; font-weight: bold; padding: 20; }
+    .read-item { padding: 10; font-size: 14; color: #666; }
+  `]
+})
+export class ReadListComponent {
+  readItems$ = this.store.select(state => state.read);
+  constructor(private store: Store<{ read: any[] }>) {}
+}
+
+// App Routing
+const routes = [
+  { path: '', component: MainComponent },
+  { path: 'settings', component: SettingsComponent },
+  { path: 'favorites', component: FavoritesComponent },
+  { path: 'read-list', component: ReadListComponent }
+];
+
+// App Module
+@NgModule({
+  bootstrap: [MainComponent],
+  imports: [
+    NativeScriptModule,
+    HttpClientModule,
+    ReactiveFormsModule,
+    NativeScriptRouterModule.forRoot(routes),
+    StoreModule.forRoot({ read: readReducer })
+  ],
+  declarations: [
+    MainComponent,
+    SettingsComponent,
+    FavoritesComponent,
+    ReadListComponent
+  ],
+  schemas: [NO_ERRORS_SCHEMA]
+})
+export class AppModule {}
+
+// package.json scripts
+{
+  "scripts": {
+    "start:api": "node server.js",
+    "start:app": "ns run android"
+  }
+}
